@@ -18,6 +18,9 @@ import {
   isTerraChain,
 } from "@certusone/wormhole-sdk";
 import { providersFromChainConfig } from "../utils/providers";
+import * as express from 'express' 
+import {Express, Request, Response} from 'express'
+import 'express-async-errors'
 
 const logger = () => getScopedLogger(["listenerHarness"], getLogger());
 
@@ -48,7 +51,15 @@ export async function run(plugins: Plugin[], storage: Storage) {
 
   //if rest is enabled, instantiate rest with filters
   if (shouldRest(plugins)) {
-    //const restListener = setupRestListener(restFilters);
+    logger().info("Initializing rest listener");
+    const app: Express = express()
+    app.use(express.text())
+    plugins.forEach((plugin) =>
+      setupRestListener(storage.getPluginStorage(plugin), providers, app)
+    );
+    app.listen(listnerEnv.restPort, () => {
+      logger().info("Listening for post requests on " + listnerEnv.restPort)
+    })
   }
   logger().debug("End of listener harness run function");
 }
@@ -177,4 +188,16 @@ async function runPluginSpyListener(
     await sleep(5 * 1000);
     logger().info("attempting to reconnect to the spy service");
   }
+}
+
+function setupRestListener(
+  pluginStorage: PluginStorage,
+  providers: Providers,
+  app: Express,
+): void {
+  app.post(`/${pluginStorage.plugin.pluginName}`, async (req, resp) => {
+    const vaa = Buffer.from(req.body, 'base64')
+    await consumeEventHarness(vaa, pluginStorage, providers)
+    resp.send()
+  })
 }

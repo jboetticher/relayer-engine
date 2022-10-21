@@ -40,16 +40,18 @@ export class DefaultStorage implements Storage {
     }
     // sanity check it's not already in active workflows
     await this.store
-      .kv<Workflow>("activeWorkflows")
+      .kv<Workflow>(ACTIVE_WORKFLOWS_KEY)
       .compareAndSwap(workflow.id.toString(), undefined, workflow);
     const plugin = nnull(this.plugins.get(workflow.pluginName));
     return { plugin, workflow };
   }
-  completeWorkflow(workflowId: number): Promise<boolean> {
+
+  completeWorkflow(workflowId: number): Promise<void> {
     return this.store
       .kv<Workflow>(ACTIVE_WORKFLOWS_KEY)
       .delete(workflowId.toString());
   }
+
   async requeueWorkflow(workflow: Workflow): Promise<void> {
     await this.store
       .kv<Workflow>(ACTIVE_WORKFLOWS_KEY)

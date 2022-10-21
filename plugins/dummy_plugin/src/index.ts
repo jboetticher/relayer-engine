@@ -10,7 +10,7 @@ import {
   SolanaWallet,
   StagingArea,
   Workflow,
-} from "plugin_interface";
+} from "relayer-engine";
 import * as wh from "@certusone/wormhole-sdk";
 import { Logger, loggers } from "winston";
 

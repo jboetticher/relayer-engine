@@ -1,10 +1,22 @@
 import { Queue } from "@datastructures-js/queue";
 import { KVStore, QueueStore, Store } from ".";
+import { CommonEnv } from "../config";
 
 export class InMemoryKVStore<V> implements KVStore<V> {
   kv: Map<string, V>;
   constructor() {
     this.kv = new Map();
+  }
+
+  async entries(): Promise<AsyncIterable<{ field: string; value: V; }>> {
+    const kv = this.kv;
+    return {
+      async *[Symbol.asyncIterator]() {
+        for (const [field, value] of kv.entries()) {
+          yield {field, value};
+        }
+      },
+    };
   }
 
   async keys(): Promise<AsyncIterable<string>> {
@@ -26,8 +38,8 @@ export class InMemoryKVStore<V> implements KVStore<V> {
     return this.kv.get(key);
   }
 
-  async delete(key: string): Promise<boolean> {
-    return this.kv.delete(key);
+  async delete(key: string): Promise<void> {
+    this.kv.delete(key);
   }
 
   async compareAndSwap(
@@ -68,6 +80,7 @@ export class InMemoryStore implements Store {
     this.kvs = new Map();
     this.queues = new Map();
   }
+
   queue<Q>(prefix?: string | undefined): QueueStore<Q> {
     const key = prefix ? prefix : "__default";
     let queue = this.queues.get(key);
@@ -77,6 +90,7 @@ export class InMemoryStore implements Store {
     }
     return queue;
   }
+  
   kv<V>(prefix?: string): InMemoryKVStore<V> {
     const key = prefix ? prefix : "__default";
     let kv = this.kvs.get(key);

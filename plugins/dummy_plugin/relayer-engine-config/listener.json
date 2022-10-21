@@ -1,3 +1,4 @@
 {
-  "spyServiceHost": "localhost:7073"
+  "spyServiceHost": "localhost:7073",
+  "restPort": 8888
 }

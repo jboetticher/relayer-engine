@@ -4,10 +4,12 @@ import {
   Workflow,
   WorkflowId,
 } from "relayer-plugin-interface";
+import { CommonEnv } from "../config";
 import { DefaultStorage } from "./storage";
 
-export {InMemoryStore} from './inMemoryStore'
-export {createStorage} from './storage'
+export { InMemoryStore } from "./inMemoryStore";
+export { RedisStore } from "./redisStore";
+export { createStorage } from "./storage";
 
 export interface PluginStorageFactory {
   getPluginStorage(plugin: Plugin): PluginStorage;
@@ -19,7 +21,7 @@ export interface Storage extends PluginStorageFactory {
   getNextWorkflow(
     plugins: Plugin[]
   ): Promise<null | { plugin: Plugin; workflow: Workflow }>;
-  completeWorkflow(workflowId: WorkflowId): Promise<boolean>;
+  completeWorkflow(workflowId: WorkflowId): Promise<void>;
   requeueWorkflow(workflow: Workflow): Promise<void>;
   handleStorageStartupConfig(plugins: Plugin[]): Promise<void>;
 }
@@ -31,11 +33,21 @@ export interface PluginStorage {
   addWorkflow(data: Object): Promise<void>;
 }
 
+/*
+ * Store - backing database
+ */
+
+export interface Store {
+  kv<V>(prefix?: string): KVStore<V>;
+  queue<Q>(prefix?: string): QueueStore<Q>;
+}
+
 export interface KVStore<V> {
+  entries(): Promise<AsyncIterable<{ field: string; value: V }>>;
   keys(): Promise<AsyncIterable<string>>;
   set(key: string, value: V): Promise<void>;
   get(key: string): Promise<V | undefined>;
-  delete(key: string): Promise<boolean>;
+  delete(key: string): Promise<void>;
   compareAndSwap(
     key: string,
     expectedValue: V | undefined,
@@ -45,19 +57,6 @@ export interface KVStore<V> {
 
 export interface QueueStore<T> {
   push(value: T): Promise<void>;
-  pop(): Promise<T>;
+  pop(): Promise<T | undefined>;
   length(): Promise<number>;
 }
-
-export interface Store {
-  kv<V>(prefix?: string): KVStore<V>;
-  queue<Q>(prefix?: string): QueueStore<Q>;
-}
-
-// export async function createRedisStorage(
-//   store: Store,
-//   plugins: Plugin[]
-// ): Promise<Storage> {
-//   await RedisHelper.ensureClient();
-//   return new DefaultStorage(RedisHelper, plugins);
-// }

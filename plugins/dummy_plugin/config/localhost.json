@@ -1,6 +1,6 @@
 {
   "shouldSpy": true,
-  "shouldRest": false,
+  "shouldRest": true,
   "spyServiceFilters": [
     {
       "chainId": 1,

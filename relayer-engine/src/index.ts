@@ -22,7 +22,7 @@ export {
   dbg,
   initLogger,
 } from "./helpers/logHelper";
-export * from 'relayer-plugin-interface'
+export * from "relayer-plugin-interface";
 
 wh.setDefaultWasm("node");
 
@@ -38,18 +38,18 @@ export interface RunArgs {
   mode: Mode;
   envType: EnvType;
   plugins: Plugin[];
-  store?: Store;
+  store?: (env: CommonEnv) => Promise<Store>;
 }
 
 export async function run(args: RunArgs): Promise<void> {
+  await readAndValidateEnv(args);
+  const commonEnv = getCommonEnv();
   const logger = getLogger();
   const storage = await createStorage(
-    args.store ? args.store : new InMemoryStore(),
+    args.store ? await args.store(commonEnv) : new InMemoryStore(),
     args.plugins
   );
-  await readAndValidateEnv(args);
 
-  const commonEnv = getCommonEnv();
   switch (commonEnv.mode) {
     case Mode.LISTENER:
       logger.info("Running in listener mode");

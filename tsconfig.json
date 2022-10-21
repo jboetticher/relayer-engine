@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "outDir": "relayer-engine/lib",
-    "target": "esnext",
+    "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "node",
     "lib": [

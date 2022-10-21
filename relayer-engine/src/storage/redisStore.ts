@@ -1,21 +1,14 @@
 import { Mutex } from "async-mutex";
 import { createClient } from "redis";
-import { CommonEnv, getCommonEnv } from "../config";
+import { KVStore, QueueStore, Store } from ".";
 import { getScopedLogger } from "../helpers/logHelper";
-import { PromHelper } from "../helpers/promHelpers";
+import { nnull } from "../utils/utils";
 
 const logger = () => getScopedLogger(["redisHelper"]);
-let promHelper: PromHelper;
 
-export function init(
-  ph: PromHelper,
-  { redisHost, redisPort }: CommonEnv
-): boolean {
-  logger().info(
-    "will connect to redis at [" + redisHost + ":" + redisPort + "]"
-  );
-  promHelper = ph;
-  return true;
+export interface RedisEnv {
+  redisPort?: number;
+  redisHost?: string;
 }
 
 // TODO
@@ -24,14 +17,167 @@ interface RedisConnectionConfig {}
 type RedisClientType = Awaited<ReturnType<typeof createConnection>>;
 let rClient: RedisClientType | null;
 
-async function createConnection() {
-  const commonEnv = getCommonEnv();
-  const { redisHost, redisPort } = commonEnv;
+export class RedisStore implements Store {
+  kvs: Map<string, RedisKV<any>>;
+  queues: Map<string, RedisQueue<any>>;
+
+  static async create(redisEnv: RedisEnv) {
+    if (!redisEnv.redisHost || !redisEnv.redisPort) {
+      throw new Error("Cannot connect to redis without host and port")
+    }
+    const client = await createConnection(redisEnv);
+    return new RedisStore(redisEnv, client);
+  }
+
+  private constructor(
+    readonly redisEnv: RedisEnv,
+    readonly client: RedisClientType
+  ) {
+    this.kvs = new Map();
+    this.queues = new Map();
+  }
+
+  kv<V>(prefix: string = "__defaultKV"): KVStore<V> {
+    let kv = this.kvs.get(prefix);
+    if (!kv) {
+      kv = new RedisKV(prefix, this.client);
+      this.kvs.set(prefix, kv);
+    }
+    return kv;
+  }
+  queue<Q>(prefix: string = "__defaultQueue"): QueueStore<Q> {
+    let queue = this.queues.get(prefix);
+    if (!queue) {
+      queue = new RedisQueue(prefix, this.client);
+      this.queues.set(prefix, queue);
+    }
+    return queue;
+  }
+}
+
+class RedisKV<V> implements KVStore<V> {
+  constructor(readonly prefix: string, readonly client: RedisClientType) {}
+
+  async keys(): Promise<AsyncIterable<string>> {
+    const iter = this.client.hScanIterator(this.prefix);
+    return {
+      async *[Symbol.asyncIterator]() {
+        for await (const { field, value } of iter) {
+          yield field;
+        }
+      },
+    };
+  }
+
+  async entries(): Promise<AsyncIterable<{ field: string; value: V }>> {
+    const iter = this.client.hScanIterator(this.prefix);
+    return {
+      async *[Symbol.asyncIterator]() {
+        for await (const { field, value } of iter) {
+          yield { field, value: JSON.parse(value) };
+        }
+      },
+    };
+  }
+
+  set(key: string, value: V): Promise<void> {
+    return enqueueOp(() =>
+      this.client.hSet(this.prefix, key, JSON.stringify(value))
+    );
+  }
+
+  async get(key: string): Promise<V | undefined> {
+    const res = await this.client.hGet(this.prefix, key);
+    if (res) {
+      return JSON.parse(res);
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    await enqueueOp(() => this.client.hDel(this.prefix, key));
+  }
+
+  compareAndSwap(
+    key: string,
+    expectedValue: V | undefined,
+    newValue: V
+  ): Promise<boolean> {
+    // directly use the mutex since this command requires a return value
+    // and should not be retried
+    return mutex.runExclusive(async () => {
+      try {
+        const client = this.client;
+        const itemInRedis = await client.hGet(this.prefix, key);
+        if (
+          expectedValue &&
+          (!itemInRedis || JSON.parse(itemInRedis) !== expectedValue)
+        ) {
+          logger().info("Compare and swap failed");
+          return false;
+        }
+        await client.hSet(this.prefix, key, JSON.stringify(newValue));
+        return true;
+      } catch (e) {
+        logger().error("Failed compare and swap");
+        logger().error(e);
+        return false;
+      }
+    });
+  }
+}
+
+class RedisQueue<Q> implements QueueStore<Q> {
+  constructor(readonly prefix: string, readonly client: RedisClientType) {}
+  push(value: Q): Promise<void> {
+    return enqueueOp(() =>
+      this.client.lPush(this.prefix, JSON.stringify(value))
+    );
+  }
+  pop(): Promise<Q | undefined> {
+    return mutex.runExclusive(() =>
+      this.client.rPop(this.prefix).then((x) => (x ? JSON.parse(x) : x))
+    );
+  }
+  length(): Promise<number> {
+    return this.client.lLen(this.prefix)
+  }
+}
+
+let backlog: (() => Promise<void>)[] = [];
+let mutex = new Mutex();
+
+async function enqueueOp<Arg extends any>(
+  op: (...args: Arg[]) => Promise<any>
+) {
+  backlog.push(op);
+  await executeBacklog();
+}
+
+// This process executes the backlog periodically, so that items inside the backlog
+// do not need to wait for a new item to enter the backlog before they can execute again
+setInterval(executeBacklog, 1000 * 60);
+
+export async function executeBacklog(): Promise<void> {
+  await mutex.runExclusive(async () => {
+    for (let i = 0; i < backlog.length; ++i) {
+      try {
+        await backlog[i]();
+      } catch (e) {
+        backlog = backlog.slice(i);
+        logger().error(e);
+        return;
+      }
+    }
+    backlog = [];
+  });
+}
+
+async function createConnection({ redisPort, redisHost }: RedisEnv) {
   try {
     let client = createClient({
       socket: {
-        host: commonEnv.redisHost,
-        port: commonEnv.redisPort,
+        host: redisHost,
+        port: redisPort,
       },
     });
 
@@ -64,26 +210,6 @@ async function createConnection() {
   }
 }
 
-async function getClient(): Promise<RedisClientType> {
-  if (!rClient) {
-    rClient = await createConnection();
-  }
-  return nnull(rClient);
-}
-
-export async function getPrefix(
-  prefix: string
-): Promise<{ key: string; value: string }[]> {
-  const client = await getClient();
-  const iterator = await client.scanIterator({ MATCH: prefix + "*" });
-  const output: { key: string; value: string }[] = [];
-  for await (const key of iterator) {
-    output.push({ key, value: nnull(await client.get(key)) });
-  }
-  logger().debug(`Prefix: ${prefix}, output: ${output}`);
-  return output;
-}
-
 /*
 async function insertItemToHashMap(
   mapKey: string,
@@ -108,111 +234,4 @@ async function insertItemToHashMap(
 */
 
 //The backlog is a FIFO queue of outstanding redis operations
-let backlog: (() => Promise<void>)[] = [];
-let mutex = new Mutex();
 
-async function enqueueOp<Arg extends any>(
-  op: (...args: Arg[]) => Promise<void>
-) {
-  backlog.push(op);
-  await executeBacklog();
-}
-
-// This process executes the backlog periodically, so that items inside the backlog
-// do not need to wait for a new item to enter the backlog before they can execute again
-setInterval(executeBacklog, 1000 * 60);
-
-export async function executeBacklog(): Promise<void> {
-  await mutex.runExclusive(async () => {
-    for (let i = 0; i < backlog.length; ++i) {
-      try {
-        await backlog[i]();
-      } catch (e) {
-        backlog = backlog.slice(i);
-        logger().error(e);
-        return;
-      }
-    }
-    backlog = [];
-  });
-}
-
-export async function insertItem(key: string, value: string): Promise<void> {
-  //Insert item into end of backlog
-  const wrappedOp = async () => {
-    logger().debug(`Inserting into redis key: ${key}, value: ${value}`);
-    const client = await getClient();
-    await client.set(key, value);
-    logger().debug(`Done inserting key: ${key}`);
-  };
-  await enqueueOp(wrappedOp);
-}
-
-export async function removeItem(key: string): Promise<void> {
-  const wrappedOp = async () => {
-    logger().debug(`removing redis key: ${key}`);
-    const client = await getClient();
-    await client.del(key);
-    logger().debug(`Done removing key: ${key}`);
-  };
-  await enqueueOp(wrappedOp);
-}
-
-export interface RedisHelper {
-  ensureClient(): Promise<void>;
-  insertItem(key: string, value: string): Promise<void>;
-  getPrefix(prefix: string): Promise<{ key: string; value: string }[]>;
-  getItem(key: string): Promise<string | null>;
-  removeItem(key: string): Promise<void>;
-  compareAndSwap(
-    prefix: string,
-    previousValue: string,
-    newValue: string
-  ): Promise<boolean>;
-}
-
-export function getItem(key: string): Promise<string | null> {
-  return getClient().then(c => c.get(key));
-}
-
-export async function ensureClient(): Promise<void> {
-  await getClient();
-}
-
-//This function can modify an existing record.
-//It will first make sure that the existing record has not been modified by a different process.
-export async function compareAndSwap(
-  prefix: string,
-  previousValue: string,
-  newValue: string
-): Promise<boolean> {
-  return await mutex.runExclusive(async () => {
-    try {
-      const client = await getClient();
-      const itemInRedis = await client.get(prefix);
-      if (itemInRedis !== previousValue) {
-        logger().info("Compare and swap failed");
-        return false;
-      }
-      await client.set(prefix, newValue);
-      return true;
-    } catch (e) {
-      logger().error("Failed compare and swap");
-      logger().error(e);
-      return false;
-    }
-  });
-}
-
-function nnull<T>(x: T | null): T {
-  return x as T;
-}
-
-const _1: RedisHelper = {
-  ensureClient,
-  insertItem,
-  getPrefix,
-  getItem,
-  compareAndSwap,
-  removeItem,
-};

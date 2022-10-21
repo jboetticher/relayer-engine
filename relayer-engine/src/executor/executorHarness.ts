@@ -126,14 +126,14 @@ async function spawnWorkflow(
   );
   activeWorkflows.set(workflow.id, workflow);
   const execute = makeExecuteFunc(actionQueues, plugin.pluginName);
-  plugin
+  return plugin
     .handleWorkflow(workflow, providers, execute)
     .then(() => activeWorkflows.delete(workflow.id))
-    .then(() =>
+    .then(() => {
       logger.info(
         `Finished workflow ${workflow.id} for plugin ${workflow.pluginName}`
-      )
-    );
+      );
+    });
 }
 
 function makeExecuteFunc(
