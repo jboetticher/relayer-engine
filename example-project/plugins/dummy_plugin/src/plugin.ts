@@ -13,8 +13,9 @@ import {
 import * as wh from "@certusone/wormhole-sdk";
 import { Logger } from "winston";
 import { assertBool } from "./utils";
-import { ChainId } from "@certusone/wormhole-sdk";
+import { ChainId, isEVMChain } from "@certusone/wormhole-sdk";
 import { ethers } from "ethers";
+import * as abi from "./abi.json";
 
 export interface DummyPluginConfig {
   spyServiceFilters?: { chainId: wh.ChainId; emitterAddress: string }[];
@@ -94,9 +95,11 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
   }
 
   formatAddress(address: string): string {
-    if(address.startsWith("0x0000000000000000000000000")) return "0x" + address.substring(26);
+    if (address.startsWith("0x000000000000000000000000")) return "0x" + address.substring(26);
     else return address;
   }
+
+
 
   async handleWorkflow(
     workflow: Workflow,
@@ -108,25 +111,31 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
 
     const payload = this.parseWorkflowPayload(workflow);
     const parsed = wh.parseVaa(payload.vaa);
+    this.logger.info(`Parsed VAA. seq: ${parsed.sequence}`);
 
     // Here we are parsing the payload so that we can send it to the right chain
     const hexPayload = parsed.payload.toString("hex");
     let [recipient, destID, sender, message] = ethers.utils.defaultAbiCoder.decode(["bytes32", "uint16", "bytes32", "string"], "0x" + hexPayload);
     recipient = this.formatAddress(recipient);
     sender = this.formatAddress(sender);
-    this.logger.info(`${sender} sent "${message}" to chain ${destID} ${recipient}.`)
+    const destChainID = destID as ChainId;
+    this.logger.info(`VAA: ${sender} sent "${message}" to ${recipient} on chain ${destID}.`);
 
-    // This is where you could do all the EVM execution if you wanted
-    const pubkey = await execute.onEVM({
-      chainId: destID as ChainId, // Attempt to execute on Ethereum (Goreli)
-      f: async (wallet, chainId) => {
-        const pubkey = wallet.wallet.address;
-
-        this.logger.info(`We got the wallet pubkey ${pubkey} on chain ${chainId}`);
-        this.logger.info(`Also have parsed vaa. seq: ${parsed.sequence}`);
-        return pubkey;
-      },
-    });
+    // Execution logic
+    if (isEVMChain(destChainID)) {
+      // This is where you could do all the EVM execution if you wanted
+      await execute.onEVM({
+        chainId: destChainID,
+        f: async (wallet, chainId) => {
+          const contract = new ethers.Contract(recipient, abi, wallet.wallet);
+          const result = await contract.processMyMessage(payload.vaa);
+          this.logger.info(result);
+        },
+      });
+    }
+    else {
+      this.logger.error("Requested chainID is not an EVM chain, which is currently unsupported.");
+    }
   }
 
   parseWorkflowPayload(workflow: Workflow): { vaa: Buffer; time: number } {
