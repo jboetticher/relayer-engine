@@ -97,22 +97,24 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     providers: Providers,
     execute: ActionExecutor
   ): Promise<void> {
-    this.logger.info("Got workflow");
+    this.logger.info("Workflow received...");
     this.logger.debug(JSON.stringify(workflow, undefined, 2));
 
     const payload = this.parseWorkflowPayload(workflow);
     const parsed = wh.parseVaa(payload.vaa);
 
+    console.log("PAYLOAD", parsed.payload);
+
     // This is where you could do all the EVM execution if you wanted
     const pubkey = await execute.onEVM({
-      chainId: 2 as ChainId, // Attempt to execute on Ethereum (Goreli)
+      chainId: 16 as ChainId, // Attempt to execute on Ethereum (Goreli)
       f: async (wallet, chainId) => {
         const pubkey = wallet.wallet.address;
-        this.logger.info(
-          `We got the wallet pubkey ${pubkey} on chain ${chainId}`
-        );
+
+        this.logger.info(`We got the wallet pubkey ${pubkey} on chain ${chainId}`);
         this.logger.info(`Also have parsed vaa. seq: ${parsed.sequence}`);
         this.logger.info(`VAA message payload from Moonbase Alpha: ${parsed.payload.toString()}`);
+
         return pubkey;
       },
     });
