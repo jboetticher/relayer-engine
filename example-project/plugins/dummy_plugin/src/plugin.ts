@@ -14,6 +14,7 @@ import * as wh from "@certusone/wormhole-sdk";
 import { Logger } from "winston";
 import { assertBool } from "./utils";
 import { ChainId } from "@certusone/wormhole-sdk";
+import { ethers } from "ethers";
 
 export interface DummyPluginConfig {
   spyServiceFilters?: { chainId: wh.ChainId; emitterAddress: string }[];
@@ -92,6 +93,11 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     };
   }
 
+  formatAddress(address: string): string {
+    if(address.startsWith("0x0000000000000000000000000")) return "0x" + address.substring(26);
+    else return address;
+  }
+
   async handleWorkflow(
     workflow: Workflow,
     providers: Providers,
@@ -103,18 +109,21 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     const payload = this.parseWorkflowPayload(workflow);
     const parsed = wh.parseVaa(payload.vaa);
 
-    console.log("PAYLOAD", parsed.payload);
+    // Here we are parsing the payload so that we can send it to the right chain
+    const hexPayload = parsed.payload.toString("hex");
+    let [recipient, destID, sender, message] = ethers.utils.defaultAbiCoder.decode(["bytes32", "uint16", "bytes32", "string"], "0x" + hexPayload);
+    recipient = this.formatAddress(recipient);
+    sender = this.formatAddress(sender);
+    this.logger.info(`${sender} sent "${message}" to chain ${destID} ${recipient}.`)
 
     // This is where you could do all the EVM execution if you wanted
     const pubkey = await execute.onEVM({
-      chainId: 16 as ChainId, // Attempt to execute on Ethereum (Goreli)
+      chainId: destID as ChainId, // Attempt to execute on Ethereum (Goreli)
       f: async (wallet, chainId) => {
         const pubkey = wallet.wallet.address;
 
         this.logger.info(`We got the wallet pubkey ${pubkey} on chain ${chainId}`);
         this.logger.info(`Also have parsed vaa. seq: ${parsed.sequence}`);
-        this.logger.info(`VAA message payload from Moonbase Alpha: ${parsed.payload.toString()}`);
-
         return pubkey;
       },
     });
