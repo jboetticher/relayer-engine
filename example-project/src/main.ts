@@ -1,7 +1,7 @@
 import * as relayerEngine from "relayer-engine";
 import dummyPluginDef, {
   DummyPluginConfig,
-} from "../plugins/dummy_plugin/src/plugin";
+} from "../plugins/simplegeneralmessage_plugin/src/plugin";
 
 async function main() {
   // load plugin config

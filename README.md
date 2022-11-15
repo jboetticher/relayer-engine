@@ -60,48 +60,18 @@ The key interfaces to provide in a plug-in can be found [here](./relayer-plugin-
 
 ## Quick start
 
-Add relayer-engine as a dependency by pointing at the github repo
-
-```json
-    "relayer-engine": "wormhole-foundation/relayer-engine",
+### Installation
+```
+npm install
+cd example-project
+npm install
 ```
 
-Define a plugin similar to AttestationPlugin or DummyPlugin, or check out the messenger example at https://github.com/wormhole-foundation/xdapp-book/blob/main/projects/messenger/src/plugin.ts
+### Running the Spy Node
 
-Define an entry point that calls `run` with something like the following:
+The relayer engine requires a spy node to be running, because otherwise they wouldn't be able to listen for confirmed VAAs. 
 
-```typescript
-await relayerEngine.run({
-  plugins: [plugin],
-  configs: {
-    executorEnv: {
-      // ...
-    },
-    listenerEnv: {
-      // ...
-    },
-    commonEnv: {
-      // ...
-    },
-  },
-  mode: Mode.BOTH,
-  envType: EnvType.LOCALHOST,
-});
-```
-
-The relayer engine requires a spy node to be running (see below for what this is)
-On mainnet:
-
-```bash
-docker run \
-    --platform=linux/amd64 \
-    -p 7073:7073 \
-    --entrypoint /guardiand \
-    ghcr.io/wormhole-foundation/guardiand:latest \
-spy --nodeKey /node.key --spyRPC "[::]:7073" --network /wormhole/mainnet/2 --bootstrap /dns4/wormhole-mainnet-v2-bootstrap.certus.one/udp/8999/quic/p2p/12D3KooWQp644DK27fd3d4Km3jr7gHiuJJ5ZGmy8hH4py7fP4FP7
-```
-
-On testnet:
+**On Testnet**:
 
 ```bash
 docker run \
@@ -110,6 +80,19 @@ docker run \
     --entrypoint /guardiand \
     ghcr.io/wormhole-foundation/guardiand:latest \
 spy --nodeKey /node.key --spyRPC "[::]:7073" --network /wormhole/testnet/2/1 --bootstrap /dns4/wormhole-testnet-v2-bootstrap.certus.one/udp/8999/quic/p2p/12D3KooWAkB9ynDur1Jtoa97LBUp8RXdhzS5uHgAfdTquJbrbN7i
+```
+
+Or, in the `/example-project/` folder, run `npm run spy` to start a testnet spy node.
+
+**On Mainnet**:
+
+```bash
+docker run \
+    --platform=linux/amd64 \
+    -p 7073:7073 \
+    --entrypoint /guardiand \
+    ghcr.io/wormhole-foundation/guardiand:latest \
+spy --nodeKey /node.key --spyRPC "[::]:7073" --network /wormhole/mainnet/2 --bootstrap /dns4/wormhole-mainnet-v2-bootstrap.certus.one/udp/8999/quic/p2p/12D3KooWQp644DK27fd3d4Km3jr7gHiuJJ5ZGmy8hH4py7fP4FP7
 ```
 
 With wormhole local validator
@@ -128,4 +111,12 @@ docker run \
     --entrypoint /guardiand \
     ghcr.io/wormhole-foundation/guardiand:latest \
 spy --nodeKey /node.key --spyRPC "[::]:7073" --bootstrap /dns4/${HOST}/udp/8999/quic/p2p/12D3KooWL3XJ9EMCyZvmmGXL2LMiVBtrVa2BuESsJiXkSj7333Jw
+```
+
+### Running the Relayer
+Remember to run the spy node first before running the relayer.
+
+```
+cd example-project
+npm run start
 ```

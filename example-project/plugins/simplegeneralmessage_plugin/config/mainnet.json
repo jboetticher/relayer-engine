@@ -1,0 +1,10 @@
+{
+  "shouldSpy": true,
+  "shouldRest": false,
+  "spyServiceFilters": [
+    {
+      "chainId": 16,
+      "emitterAddress": "0xdd7949A88F9058624B64014948D713a9273a8394"
+    }
+  ]
+}

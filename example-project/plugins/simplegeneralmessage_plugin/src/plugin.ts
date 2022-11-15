@@ -13,7 +13,9 @@ import {
 import * as wh from "@certusone/wormhole-sdk";
 import { Logger } from "winston";
 import { assertBool } from "./utils";
-import { ChainId } from "@certusone/wormhole-sdk";
+import { ChainId, isEVMChain } from "@certusone/wormhole-sdk";
+import { ethers } from "ethers";
+import * as abi from "./abi.json";
 
 export interface DummyPluginConfig {
   spyServiceFilters?: { chainId: wh.ChainId; emitterAddress: string }[];
@@ -33,6 +35,8 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
   readonly pluginName = DummyPlugin.pluginName;
   private static pluginConfig: DummyPluginConfig | undefined;
   pluginConfig: DummyPluginConfig;
+
+  /*====================== Initialization of the Plugin =======================*/
 
   static init(
     pluginConfig: any
@@ -66,6 +70,10 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     this.shouldSpy = this.pluginConfig.shouldSpy;
   }
 
+  /*===================== Listener Component of the Plugin =====================*/
+
+  // How the relayer injects the VAA filters.
+  // This is the default implementation provided by the dummy plugin.
   getFilters(): ContractFilter[] {
     if (this.pluginConfig.spyServiceFilters) {
       return this.pluginConfig.spyServiceFilters;
@@ -74,6 +82,8 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     throw new Error("Contract filters not specified in config");
   }
 
+  // Receives VAAs and returns workflows.
+  // This is the default implementation provided by the dummy plugin.
   async consumeEvent(
     vaa: Buffer,
     stagingArea: { counter?: number }
@@ -92,32 +102,57 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     };
   }
 
+  /*===================== Executor Component of the Plugin =====================*/
+
+  // Consumes a workflow for execution
   async handleWorkflow(
     workflow: Workflow,
     providers: Providers,
     execute: ActionExecutor
   ): Promise<void> {
-    this.logger.info("Got workflow");
+    this.logger.info("Workflow received...");
     this.logger.debug(JSON.stringify(workflow, undefined, 2));
 
     const payload = this.parseWorkflowPayload(workflow);
     const parsed = wh.parseVaa(payload.vaa);
+    this.logger.info(`Parsed VAA. seq: ${parsed.sequence}`);
 
-    const pubkey = await execute.onEVM({
-      chainId: 2 as ChainId,
-      f: async (wallet, chainId) => {
-        const pubkey = wallet.wallet.address;
-        this.logger.info(
-          `We got dat wallet pubkey ${pubkey} on chain ${chainId}`
-        );
-        this.logger.info(`Also have parsed vaa. seq: ${parsed.sequence}`);
-        return pubkey;
-      },
-    });
+    // Here we are parsing the payload so that we can send it to the right recipient
+    const hexPayload = parsed.payload.toString("hex");
+    let [recipient, destID, sender, message] = ethers.utils.defaultAbiCoder.decode(["bytes32", "uint16", "bytes32", "string"], "0x" + hexPayload);
+    recipient = this.formatAddress(recipient);
+    sender = this.formatAddress(sender);
+    const destChainID = destID as ChainId;
+    this.logger.info(`VAA: ${sender} sent "${message}" to ${recipient} on chain ${destID}.`);
 
-    this.logger.info(`Result of action on solana ${pubkey}`);
+    // Execution logic
+    if (isEVMChain(destChainID)) {
+      // This is where you do all of the EVM execution.
+      // Add your own private wallet for the executor to inject in relayer-engine-config/executor.json
+      await execute.onEVM({
+        chainId: destChainID,
+        f: async (wallet, chainId) => {
+          const contract = new ethers.Contract(recipient, abi, wallet.wallet);
+          const result = await contract.processMyMessage(payload.vaa);
+          this.logger.info(result);
+        },
+      });
+    }
+    else {
+      // The relayer plugin has a built-in Solana wallet handler, which you could use here.
+      // NEAR & Algorand are supported by Wormhole, but they're not supported by the relayer plugin.
+      // If you want to interact with NEAR or Algorand you'd have to make your own wallet management system, that's all.      
+      this.logger.error("Requested chainID is not an EVM chain, which is currently unsupported.");
+    }
   }
 
+  // Formats bytes32 data to an ethereum style address if necessary.
+  formatAddress(address: string): string {
+    if (address.startsWith("0x000000000000000000000000")) return "0x" + address.substring(26);
+    else return address;
+  }
+
+  // Parses a workflow into the VAA, and when it was received.
   parseWorkflowPayload(workflow: Workflow): { vaa: Buffer; time: number } {
     return {
       vaa: Buffer.from(workflow.data.vaa, "base64"),
