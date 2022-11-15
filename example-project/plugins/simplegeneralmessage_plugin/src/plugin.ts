@@ -127,9 +127,7 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
 
     // Execution logic
     if (isEVMChain(destChainID)) {
-      // This is where you do all of the EVM execution. You could also execute in Solana too.
-      // NEAR & Algorand are still supported by Wormhole. They're just not supported by the relayer plugin.
-      // If you want to interact with NEAR or Algorand you'd have to make your own wallet management system, that's all.
+      // This is where you do all of the EVM execution.
       // Add your own private wallet for the executor to inject in relayer-engine-config/executor.json
       await execute.onEVM({
         chainId: destChainID,
@@ -141,6 +139,9 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
       });
     }
     else {
+      // The relayer plugin has a built-in Solana wallet handler, which you could use here.
+      // NEAR & Algorand are supported by Wormhole, but they're not supported by the relayer plugin.
+      // If you want to interact with NEAR or Algorand you'd have to make your own wallet management system, that's all.      
       this.logger.error("Requested chainID is not an EVM chain, which is currently unsupported.");
     }
   }
