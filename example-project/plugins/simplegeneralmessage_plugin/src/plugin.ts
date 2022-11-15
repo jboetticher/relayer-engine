@@ -36,6 +36,8 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
   private static pluginConfig: DummyPluginConfig | undefined;
   pluginConfig: DummyPluginConfig;
 
+  /*====================== Initialization of the Plugin =======================*/
+
   static init(
     pluginConfig: any
   ): (env: CommonEnv, logger: Logger) => DummyPlugin {
@@ -68,7 +70,10 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     this.shouldSpy = this.pluginConfig.shouldSpy;
   }
 
-  // How the relayer injects the VAA filters. This is the default implementation provided
+  /*===================== Listener Component of the Plugin =====================*/
+
+  // How the relayer injects the VAA filters.
+  // This is the default implementation provided by the dummy plugin.
   getFilters(): ContractFilter[] {
     if (this.pluginConfig.spyServiceFilters) {
       return this.pluginConfig.spyServiceFilters;
@@ -77,7 +82,8 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     throw new Error("Contract filters not specified in config");
   }
 
-  // Receives VAAs and returns workflows. 
+  // Receives VAAs and returns workflows.
+  // This is the default implementation provided by the dummy plugin.
   async consumeEvent(
     vaa: Buffer,
     stagingArea: { counter?: number }
@@ -96,13 +102,9 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     };
   }
 
-  formatAddress(address: string): string {
-    if (address.startsWith("0x000000000000000000000000")) return "0x" + address.substring(26);
-    else return address;
-  }
+  /*===================== Executor Component of the Plugin =====================*/
 
-
-  // 
+  // Consumes a workflow for execution
   async handleWorkflow(
     workflow: Workflow,
     providers: Providers,
@@ -115,7 +117,7 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     const parsed = wh.parseVaa(payload.vaa);
     this.logger.info(`Parsed VAA. seq: ${parsed.sequence}`);
 
-    // Here we are parsing the payload so that we can send it to the right chain
+    // Here we are parsing the payload so that we can send it to the right recipient
     const hexPayload = parsed.payload.toString("hex");
     let [recipient, destID, sender, message] = ethers.utils.defaultAbiCoder.decode(["bytes32", "uint16", "bytes32", "string"], "0x" + hexPayload);
     recipient = this.formatAddress(recipient);
@@ -125,7 +127,8 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
 
     // Execution logic
     if (isEVMChain(destChainID)) {
-      // This is where you could do all the EVM execution if you wanted
+      // This is where you do all of the EVM execution. You could also execute in Solana too
+      // Add your own private wallet for the executor to inject in relayer-engine-config/executor.json
       await execute.onEVM({
         chainId: destChainID,
         f: async (wallet, chainId) => {
@@ -140,6 +143,13 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     }
   }
 
+  // Formats bytes32 data to an ethereum style address if necessary.
+  formatAddress(address: string): string {
+    if (address.startsWith("0x000000000000000000000000")) return "0x" + address.substring(26);
+    else return address;
+  }
+
+  // Parses a workflow into the VAA, and when it was received.
   parseWorkflowPayload(workflow: Workflow): { vaa: Buffer; time: number } {
     return {
       vaa: Buffer.from(workflow.data.vaa, "base64"),
