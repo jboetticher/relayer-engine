@@ -68,6 +68,7 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     this.shouldSpy = this.pluginConfig.shouldSpy;
   }
 
+  // How the relayer injects the VAA filters. This is the default implementation provided
   getFilters(): ContractFilter[] {
     if (this.pluginConfig.spyServiceFilters) {
       return this.pluginConfig.spyServiceFilters;
@@ -76,6 +77,7 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
     throw new Error("Contract filters not specified in config");
   }
 
+  // Receives VAAs and returns workflows. 
   async consumeEvent(
     vaa: Buffer,
     stagingArea: { counter?: number }
@@ -100,7 +102,7 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
   }
 
 
-
+  // 
   async handleWorkflow(
     workflow: Workflow,
     providers: Providers,
