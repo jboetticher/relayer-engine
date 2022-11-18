@@ -6,7 +6,7 @@ import dummyPluginDef, {
 async function main() {
   // load plugin config
   const pluginConfig = (await relayerEngine.loadFileAndParseToObject(
-    `./plugins/dummy_plugin/config/${relayerEngine.EnvType.DEVNET.toLowerCase()}.json`
+    `./plugins/simplegeneralmessage_plugin/config/${relayerEngine.EnvType.DEVNET.toLowerCase()}.json`
   )) as DummyPluginConfig;
 
   // run relayer engine
