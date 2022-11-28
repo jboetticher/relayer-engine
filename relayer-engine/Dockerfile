@@ -16,7 +16,7 @@ RUN npm ci && \
     npm run build
 
 # TODO handle all plugins in this directory
-WORKDIR /app/relayer/plugins/dummy_plugin
+WORKDIR /app/relayer/plugins/simplegeneralmessage_plugin
 
 RUN npm ci && \
     npm run build
