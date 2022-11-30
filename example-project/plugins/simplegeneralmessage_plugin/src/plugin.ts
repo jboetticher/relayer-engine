@@ -132,9 +132,14 @@ export class DummyPlugin implements Plugin<WorkflowPayload> {
       await execute.onEVM({
         chainId: destChainID,
         f: async (wallet, chainId) => {
-          const contract = new ethers.Contract(recipient, abi, wallet.wallet);
-          const result = await contract.processMyMessage(payload.vaa);
-          this.logger.info(result);
+          try {
+            const contract = new ethers.Contract(recipient, abi, wallet.wallet);
+            const result = await contract.processMyMessage(payload.vaa);
+            this.logger.info(result);
+          }
+          catch(e) {
+            console.log("Error executing: " + e)
+          }
         },
       });
     }
