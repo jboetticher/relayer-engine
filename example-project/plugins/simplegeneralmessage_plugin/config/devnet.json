@@ -4,23 +4,23 @@
   "spyServiceFilters": [
     {
       "chainId": 16,
-      "emitterAddress": "0xD0266469Fb32372f06A9961FB124a8eaa6F1E5dC"
+      "emitterAddress": "0x9C3F825FFC30d07aE2aD3D73200a71a3f2255759"
     },
     {
       "chainId": 10,
-      "emitterAddress": "0xF9326e18D4b1deDF59C12a1131de553C1F0aFf8C"
+      "emitterAddress": "0xCf11E10377cf4730F18A617146E7D2486F501e2A"
     },
     {
       "chainId": 2,
-      "emitterAddress": "0xD0266469Fb32372f06A9961FB124a8eaa6F1E5dC"
+      "emitterAddress": "0xfB7327Fe26aD52b693E38232E5D97F4892623075"
     },
     {
       "chainId": 5,
-      "emitterAddress": "0xF9326e18D4b1deDF59C12a1131de553C1F0aFf8C"
+      "emitterAddress": "0xfB7327Fe26aD52b693E38232E5D97F4892623075"
     },
     {
       "chainId": 6,
-      "emitterAddress": "0xD0266469Fb32372f06A9961FB124a8eaa6F1E5dC"
+      "emitterAddress": "0xfB7327Fe26aD52b693E38232E5D97F4892623075"
     }
   ]
 }
