@@ -1,4 +1,4 @@
-# Relayer Engine (Moonbuilder's Version)
+# Relayer Engine
 
 You can use `npm run testnet-spy` to run the spy node, which is simpler. Please still read the following blog post:  
 
